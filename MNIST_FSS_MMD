@@ -11,17 +11,6 @@ def kernel(x,y):
     y = np.array(y)
     #print(np.linalg.norm(x-y))
     return math.exp((-np.linalg.norm(x-y)**2)/(2*1000000))
-def computeKS(a,b,N):
-
-    dsum = []
-    x = np.arange(-5,8,0.1)
-    for j in x:
-        suma = sum([i < j for i in a])
-        sumb = sum([i < j for i in b])
-        dsum.append(abs(suma - sumb)/N)
-        #print(max(dsum))
-    return max(dsum)
-
 # def computeMMD(x,y,N):
 #     g = [[kernel(x[:,i], x[:,j]) + kernel(y[:,i],y[:,j]) - (2*kernel(x[:,i], y[:,j])) for j in range(N)] for i in range(N)]
 #     #print(kernel(x[:,1], y[:,2]))
@@ -49,44 +38,14 @@ def computeMMD(x, y, N,i,j):
 
     # Calculate the MMD using vectorized operations
     # MMD_squared = (np.sum(Kxx) + np.sum(Kyy) - 2 * np.sum(Kxy)) / (N**2)
-    MMD_squared = (np.sum(np.exp(-np.linalg.norm(x[:, :, None]-x[:, None, :], axis=0)**2/(2*1000000))) + 
-                    np.sum(np.exp(-np.linalg.norm(y[:, :, None]-y[:, None, :], axis=0)**2/(2*1000000))) - 
-                    2 * np.sum(np.exp(-np.linalg.norm(x[:, :, None]-y[:, None, :], axis=0)**2/(2*1000000)))) / (N**2)
+    MMD_squared = (np.sum(np.exp(-np.linalg.norm(x[:, :, None]-x[:, None, :], axis=0)**2/(2))) + 
+                    np.sum(np.exp(-np.linalg.norm(y[:, :, None]-y[:, None, :], axis=0)**2/(2))) - 
+                    2 * np.sum(np.exp(-np.linalg.norm(x[:, :, None]-y[:, None, :], axis=0)**2/(2)))) / (N**2)
     #print(f'MMD_squared = {MMD_squared}')
     MMD_squared_abs = abs(MMD_squared)
     # print(np.linalg.norm(x[:, :, None]-x[:, None, :], axis=0)**2, np.linalg.norm(y[:, :, None]-y[:, None, :], axis=0)**2, np.linalg.norm(x[:, :, None]-y[:, None, :], axis=0)**2)
     # print(i,j,MMD_squared)
     return np.sqrt(MMD_squared_abs)
-
-def update(x, y, n):
-    # Convert x and y to numpy arrays
-    x = np.array(x)
-    y = np.array(y)
-
-    # Calculate the last element in x and y
-    xn1 = x[n-1]
-    yn1 = y[n-1]
-
-    # Compute kernels for all elements with the last element
-    kernel_xn1 = kernel(x[:n], xn1)  # Kernel values between all elements in x and xn1
-    kernel_yn1 = kernel(y[:n], yn1)  # Kernel values between all elements in y and yn1
-    kernel_xyn1 = kernel(x[:n], yn1)  # Kernel values between all elements in x and yn1
-
-    # Sum the results for the first part
-    sum1 = np.sum(kernel_xn1 + kernel_yn1 - 2 * kernel_xyn1)
-
-    # Compute kernels for the last element in x and y with all elements up to n-1
-    kernel_xn1_m = kernel(xn1, x[:n-1])  # Kernel values between xn1 and all elements in x[:n-1]
-    kernel_yn1_m = kernel(yn1, y[:n-1])  # Kernel values between yn1 and all elements in y[:n-1]
-    kernel_xyn1_m = kernel(xn1, y[:n-1])  # Kernel values between xn1 and all elements in y[:n-1]
-
-    # Sum the results for the second part
-    sum2 = np.sum(kernel_xn1_m + kernel_yn1_m - 2 * kernel_xyn1_m)
-
-    # Calculate the final result
-    result = (sum1 + sum2) / (n**2)
-    
-    return result
 
 #lst = [[0,10,6,5,9],[10,0,8,7,2],[6,8,0,1,4],[5,7,1,0,3],[9,2,4,3,0]]
 import random
@@ -96,9 +55,8 @@ K = 10      # number of clusters
 means = [i for i in range(K) for j in range(M)]
 
 correct = [[(M*i)+j for j in range(M)]for i in range(K)]
-Nvec = [20, 40, 60, 80, 100, 120, 140]  # Number of elements in each stream
+Nvec = [30,32,34,36,38,40,42]  # Number of elements in each stream
 print(correct)
-
 import pickle
 with open('MNIST_50_arms_10_clusters_norm1.pkl', 'rb') as pkl_file:
     y_all = pickle.load(pkl_file)
@@ -114,158 +72,106 @@ def wrong_streams_ratio(C_sort, correct, S=50):
 
 col_indices = np.random.choice(1000, 200, replace=False)
 print(col_indices)
-import math
-#constvec = [1.3,1.4,1.5,1.6,1.7,1.8,1.9,2]
-constvec = [170,180,190,200,210,220,230,240]
-Pe = np.zeros(len(constvec))
-lnPe=np.zeros(len(constvec))
-expsamples=np.zeros(len(constvec))
-print(Pe,lnPe,expsamples)
 
-for ii in range(len(constvec)):
-    const = constvec[ii]
-    iter_sum = 0
-    error = 0
+Pe = np.zeros(len(Nvec))
+Pe2 = np.zeros(len(Nvec))
+lnPe=np.zeros(len(Nvec))
+lnPe2 = np.zeros(len(Nvec))
+
+for ii in range(len(Nvec)):
+    N = Nvec[ii]
+    print(f'N = {N}')
     total = 0
-    while error < 1:
-        ##############  INITIALISATION  ################
-        # cluster indices 0 to M-1 and an empty list lst
+    error = 0
+    pe2_sum = 0 # to sum wrong stream ratio over different shuffle
+    
 
-        col_indices = np.random.choice(1000, nn, replace=False)
+    while total<10000:
+
+        col_indices = np.random.choice(1000, N, replace=False) # hardcoded
         y = {}
         for s in range(S):
             y[s] = y_all[s][:, col_indices]
 
-        clusters = [[i] for i in range(M)]
+        clusters = [[i] for i in range(S)]
+        total += 1
         lst = [[] for i in range(M)]
 
-        # generate first 2 samples to initialize MMD estimate
-        nn = 2
-        # X = np.asarray([np.random.normal(means[j],1,nn) for j in range(M)])
+        # a = [np.random.normal(means[i],1,(1,N)) for i in range(M)]
+        # y = np.asarray(a)
+        #y = np.vstack(y)
+        lst = [[computeMMD(y[i],y[j],N,i,j) for j in range(i+1)] for i in range(S)]
+        # print('All MMDs computed')
+        # print('MMD matrix:',lst)
 
-        ####    Calculating initial MMDs between each pair of sequences    ####
+        for i in range(S):
+            for j in range(S):
+                if i<j:
+                    lst[i].append(lst[j][i])
+        #print(lst)
+        n = 0
+        while len(clusters)>K:
 
-        lst_dseq =np.zeros((M,M))
-        for i in range(1,M):
-            for j in range(i):
-                lst_dseq[i][j] = computeMMD(y[i],y[j],nn)
-                lst_dseq[j][i] = lst_dseq[i][j]
-        #print(lst_fixed)
-
-        ##### TEST-STATISTIC Tn INITIALISATION #####
-        Tn = 0
-        #print(np.min(lst_index,axis = 0))               #it will a column matrix of all 0
-        #print(np.min(lst_index,axis = 1))                #it will a row matrix of all 0
-
-        #minval = np.min(lst_fixed[np.nonzero(lst_fixed)])         #will give you the non zero min value of the matrix
-        #print(minval)
-
-        #[min_i,min_j] = np.where(lst_fixed==minval)       #will give the index of the  min value of the matrix
-        #print([min_i,min_j])
-
-        #Tn = minval    #minimum inter-cluster distance
-        #print('Minimum inter-cluster distance after iteration ', nn, ':', Tn)
-
-        while Tn < (const/(nn)):
-            nn =nn + 1
-
-            lst_dc = [[] for i in range(M)]
-            lst_dc = [[lst_dseq[i][j] for j in range(i+1)] for i in range(M)]
-            for i in range(M):
-                for j in range(M):
-                    if i<j:
-                        lst_dc[i].append(lst_dc[j][i])
-            #print(lst_new)
-            #####
-            # Code for SLINK
-            clusters = [[i] for i in range(M)]
-            # Merge closest clusters till number of clusters is equal to K
-            while len(clusters)>K:
-
-                ####    FIND MINIMUM    ####
-
-                #mi = sys.float_info.max
-                mi = 100
-                for i in range(len(lst_dc)):
-                    for j in range(i+1):
-                        if i != j:
-                            if lst_dc[i][j] < mi:
-                                mi = lst_dc[i][j]
-                                a,b = [i,j]
-                #print("the values of a and b are :", a,b)
-                clusters[b].extend(clusters[a])  #add the elements of a to b at the end
-                del clusters[a]                   #delete cluster a
-                #print(clusters)
-
-                ####    MERGE ROWS  ####
-                #print("the lst[b] is ",lst[b])
-                #print("the lst[a] is ",lst[a])
-                for i in range(len(lst_dc[b])):        #merge rows 'a' and 'b'
-                    if min(lst_dc[a][i],lst_dc[b][i]) != 0:
-                        lst_dc[b][i] = min(lst_dc[a][i],lst_dc[b][i])
-                del lst_dc[a]
-
-                ####    UPDATE ROWS     ####
-                for i in range(len(lst_dc)):       #update all other rows
-                    if i!=b:
-                        lst_dc[i][b] = min(lst_dc[i][a],lst_dc[i][b])
-                    del lst_dc[i][a]   #new statement
-
-                #print('dist matrix', lst)
-                #print('dist matrix 2', dist)
-                #print('clusters',clusters)
-
-            #print('Clusters after iteration ', nn, ':', clusters)
-
+            ####    FIND MINIMUM    ####
+        
+            #mi = sys.float_info.max
             mi = 100
-            for i in range(len(lst_dc)):
+            for i in range(len(lst)):
                 for j in range(i+1):
                     if i != j:
-                        if lst_dc[i][j] < mi:
-                            mi = lst_dc[i][j]
-            Tn = mi
+                        if lst[i][j] < mi:
+                            mi = lst[i][j]
+                            a,b = [i,j]
+            # print("the values a and b are ",a,b)
+            clusters[b].extend(clusters[a])
+            del clusters[a]
+            # print(clusters)
 
-            # generate one more sample for each data stream
-            # z = np.asarray([np.random.normal(means[j],1,1) for j in range(M) ])  #creates a 1 dim array with means and SD 1
-            # X = np.append(X,z,axis=1)       # new samples   #axis =1 means it will add the values of z along column wise
+            ####    MERGE ROWS  ####
 
-            #Update MMDs between each pair of data streams
-            lst_dseq_1=np.zeros((M,M))
-            for i in range(M):
-                for j in range(i):
-                    lst_dseq_1[i,j] = math.sqrt(((lst_dseq[i][j]*(nn-1)/nn)**2) + update(y[i,:],y[j,:],nn))      # updated distances
-                    lst_dseq_1[j,i]=lst_dseq_1[i,j]
-            for i in range(M):
-                for j in range(M):
-                    lst_dseq[i,j] =lst_dseq_1[i,j]
+            for i in range(len(lst[b])):        #merge rows 'a' and 'b'
+                if min(lst[a][i],lst[b][i]) != 0:
+                    lst[b][i] = min(lst[a][i],lst[b][i])
+            del lst[a]
 
-        #print('Minimum inter-cluster distance after iteration ', nn, ':', Tn)
-        #print('Clusters after iteration ', nn, ':', clusters)
-        #print('Errors', error)
-        #print('Total', total)
+            ####    UPDATE ROWS     ####
 
-        # Check if clustering is correct and update errors and number of samples taken
-        iter_sum += nn
-        # CHECKING IF IT'S CORRECT
+            for i in range(len(lst)):       #update all other rows
+                if i!=b:
+                    lst[i][b] = min(lst[i][a],lst[i][b])
+                del lst[i][a]   #new statement
+
+            #print('dist matrix', lst)
+            #print('dist matrix 2', dist)
+            # print('clusters',clusters)
+            n = n+1
+
         clusters.sort()
         C_sort = []
         for x in clusters:
             x.sort()
             C_sort.append(x)
 
-        if C_sort != correct:
+        # print(C_sort)
+        #print(centers)
+        pe2_sum = pe2_sum + wrong_streams_ratio(C_sort, correct, S)
+
+        if correct != C_sort:
             error = error + 1
-        total = total + 1
+            #print('L')
+        #else:
+            #print('W')
+            print('sum_pe1, sum_pe2, total', error,pe2_sum, total)
+            # print(C_sort)
 
-        #print(C_sort)
-
-
+    Pe2[ii] = pe2_sum/total
     Pe[ii] = error/total
-    lnPe[ii] = math.log(Pe[ii])
-    expsamples[ii]= iter_sum/total
-    print(lnPe[ii],expsamples[ii])
+    lnPe[ii] = np.log(Pe[ii])
+    lnPe2[ii] = np.log(Pe2[ii])
+    print(f'Final Results for N = {N} ---------------------------------------------')
+    print('total, pe1, lnpe1, pe2, lnpe2', total,Pe[ii],lnPe[ii], Pe2[ii], lnPe2[ii])
+    print('-------------------------------------------------------------')
+    
 
-print(total,expsamples,lnPe)
-print(iter_sum / total)
 
 
