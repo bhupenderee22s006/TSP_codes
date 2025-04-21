@@ -1,0 +1,204 @@
+#this is the code for slink fss using ksd as distance metric 
+
+import numpy as np
+def initial_cdf(x1,n):
+
+    cdf_initial = []
+    x = np.arange(-5,8,0.1)
+    for a in x:
+        suma = sum([i < a for i in x1])/n
+        cdf_initial.append(suma)
+    return cdf_initial
+
+def update_CDF(cdf_old,x1n,n):
+    cdf_new = []
+    x = np.arange(-5,8,0.1)
+    count = 0
+    for a in x:
+        suma = (((n-1)/n) * cdf_old[count]) + ((x1n < a)/n)
+        cdf_new.append(suma)
+        count = count + 1
+        #print(type(suma))
+    #print(count)
+    return cdf_new
+
+def computeKS_seq(cdfx1,cdfx2,n):
+    x = np.arange(-5,8,0.1)
+    count = 0
+    dsum_updated = []
+    for j in x: 
+        dsum_updated.append(abs(cdfx1[count] - cdfx2[count])/n)
+        count = count + 1
+    return max(dsum_updated)
+
+###########     Algorithm 1 KMED-SEQ: Clustering when K is known S    #########
+
+M = 25  # total no of streams
+K = 5   # no of clusters
+Mk = 5  # no of streams per cluster
+correct = [[(Mk*i)+j for j in range(Mk)]for i in range(K)]
+means = [[i for j in range(Mk)] for i in range(K)]
+
+print(correct,means)
+
+import math 
+iter_sum = 0
+error = 0
+total = 0
+const = 0.5
+while error < 1:
+    ##############  INITIALISATION  ################
+    # cluster indices 0 to M-1 and an empty list lst
+    clusters = [[i] for i in range(M)]
+    lst = [[] for i in range(M)]
+    cdf_lst = [[] for i in range(M)]
+    #print(1,cdf_lst)
+
+    # generate first 2 samples to initialize MMD estimate (KSD estimate)
+    nn = 2
+    X = np.asarray([np.random.normal(means[j][i],1,nn) for j in range(Mk) for i in range(K)])
+    
+    ####    Calculating initial CDFs    ####
+
+    for i in range(M):
+        cdf_lst[i] = initial_cdf(X[i,:],nn)
+    #print('Initial cdf',cdf_lst)
+
+    ####    Calculating initial KSDs    ####
+    lst_dseq = np.zeros((M,M))
+    for i in range(1,M):
+        for j in range(i):
+            lst_dseq[i][j] = computeKS_seq(cdf_lst[i],cdf_lst[j],nn)
+            lst_dseq[j][i] = lst_dseq[i][j]
+
+    ####    Calculating initial MMDs between each pair of sequences    ####
+    
+    # lst_dseq = np.zeros((M,M))
+    # for i in range(1,M):
+    #     for j in range(i):
+    #         lst_dseq[i][j] = computeMMD(X[i,:],X[j,:],nn)
+    #         lst_dseq[j][i] = lst_dseq[i][j]
+    #print(lst_fixed)
+
+
+
+    ##### TEST-STATISTIC Tn INITIALISATION #####
+    Tn = 0
+    #print(np.min(lst_index,axis = 0))               #it will a column matrix of all 0
+    #print(np.min(lst_index,axis = 1))                #it will a row matrix of all 0
+
+    #minval = np.min(lst_fixed[np.nonzero(lst_fixed)])         #will give you the non zero min value of the matrix
+    #print(minval)
+
+    #[min_i,min_j] = np.where(lst_fixed==minval)       #will give the index of the  min value of the matrix
+    #print([min_i,min_j])
+
+    #Tn = minval    #minimum inter-cluster distance
+    print('Minimum inter-cluster distance after iteration ', nn, ':', Tn)
+
+    while Tn < (const/(nn**0.5)):
+        nn = nn + 1
+        
+        lst_dc = [[] for i in range(M)]
+        lst_dc = [[lst_dseq[i][j] for j in range(i+1)] for i in range(M)]
+        for i in range(M):
+            for j in range(M):
+                if i<j:
+                    lst_dc[i].append(lst_dc[j][i])   
+        #print(lst_new)
+        #####
+        # Code for SLINK
+        clusters = [[i] for i in range(M)]
+        # Merge closest clusters till number of clusters is equal to K
+        while len(clusters)>K:
+
+            ####    FIND MINIMUM    ####
+
+            #mi = sys.float_info.max
+            mi = 100
+            for i in range(len(lst_dc)):
+                for j in range(i+1):
+                    if i != j:
+                        if lst_dc[i][j] < mi:
+                            mi = lst_dc[i][j]
+                            a,b = [i,j]
+            #print("the values of a and b are :", a,b)
+            clusters[b].extend(clusters[a])  #add the elements of a to b at the end 
+            del clusters[a]                   #delete cluster a 
+            #print(clusters)
+
+            ####    MERGE ROWS  ####
+            #print("the lst[b] is ",lst[b])
+            #print("the lst[a] is ",lst[a])
+            for i in range(len(lst_dc[b])):        #merge rows 'a' and 'b'
+                if min(lst_dc[a][i],lst_dc[b][i]) != 0:
+                    lst_dc[b][i] = min(lst_dc[a][i],lst_dc[b][i])
+            del lst_dc[a]
+
+            ####    UPDATE ROWS     ####
+            for i in range(len(lst_dc)):       #update all other rows
+                if i!=b:
+                    lst_dc[i][b] = min(lst_dc[i][a],lst_dc[i][b])
+                del lst_dc[i][a]   #new statement
+
+            #print('dist matrix', lst)
+            #print('dist matrix 2', dist)
+            #print('clusters',clusters)
+            
+        #print('Clusters after iteration ', nn, ':', clusters)
+
+        mi = 100
+        for i in range(len(lst_dc)):
+            for j in range(i+1):
+                if i != j:
+                    if lst_dc[i][j] < mi:
+                        mi = lst_dc[i][j] 
+        Tn = mi
+
+        # generate one more sample for each data stream
+        z = np.asarray([np.random.normal(means[j][i],1,1) for j in range(Mk) for i in range(K)])  #creates a 1 dim array with means and SD 1
+        X = np.append(X,z,axis=1)       # new samples   #axis =1 means it will add the values of z along column wise
+
+        # update CDFs
+
+        for i in range(M):
+            cdf_lst[i] = update_CDF(cdf_lst[i],z[i][0],nn)
+        #print('Updated cdfs',type(cdf_lst))
+        
+        #Update MMDs between each pair of data streams
+        lst_dseq_1=np.zeros((M,M))
+        for i in range(M):
+            for j in range(i):
+                lst_dseq_1[i,j] = computeKS_seq(cdf_lst[i],cdf_lst[j],nn)
+                #lst_dseq_1[i,j] = math.sqrt(((lst_dseq[i][j]*(nn-1)/nn)**2) + update(X[i,:],X[j,:],nn))      # updated distances
+                lst_dseq_1[j,i]=lst_dseq_1[i,j]
+        for i in range(M):
+            for j in range(M):
+                lst_dseq[i,j] =lst_dseq_1[i,j]
+        
+
+    print('Minimum inter-cluster distance after iteration ', nn, ':', Tn)
+    print('Clusters after iteration ', nn, ':', clusters)
+    print('Errors', error)
+    print('Total', total)
+    
+    # Check if clustering is correct and update errors and number of samples taken
+    iter_sum += nn
+    # CHECKING IF IT'S CORRECT
+    clusters.sort()
+    C_sort = []
+    for x in clusters:
+        x.sort()
+        C_sort.append(x)
+
+    if C_sort != correct:
+        error = error + 1
+    total = total + 1
+
+    print(C_sort)
+   
+
+Pe = error/total
+lnPe = math.log(Pe)
+print(total,Pe,lnPe)
+print(iter_sum / total)
